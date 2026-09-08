@@ -119,6 +119,112 @@ const RISK_COLORS = {LOW:"#178A4C", MEDIUM:"#C98A00", HIGH:"#D9660B", CRITICAL:"
 const RISK_DOT = {LOW:"🟢", MEDIUM:"🟡", HIGH:"🟠", CRITICAL:"🔴"};
 const fmtCr = n => `₹${n.toLocaleString('en-IN',{maximumFractionDigits:1})} Cr`;
 
+/* ---------------- Portfolio Analytics: Benchmarking + Driver Analysis ---------------- */
+/* Aggregates the same swappable runAIAnalysis() output across the portfolio.
+   Replace with real cross-project statistics (pandas groupby, z-scores against
+   historical PAIMANA/OCMS baselines, etc.) without touching any UI component. */
+function withAI(projects){ return projects.map(p=>({...p, ai: runAIAnalysis(p)})); }
+function costOverrunPct(p){ return p.plannedCost ? ((p.currentExpenditure-p.plannedCost)/p.plannedCost)*100 : 0; }
+function delayPct(p){ return p.plannedDuration ? ((p.actualDuration-p.plannedDuration)/p.plannedDuration)*100 : 0; }
+
+function getSectorBenchmarks(projects){
+  const rows = withAI(projects);
+  const groups = {};
+  rows.forEach(p=>{
+    const key = p.type;
+    if(!groups[key]) groups[key]={type:key,count:0,riskSum:0,costOverrunSum:0,delaySum:0};
+    groups[key].count++;
+    groups[key].riskSum += p.ai.overallRisk;
+    groups[key].costOverrunSum += costOverrunPct(p);
+    groups[key].delaySum += delayPct(p);
+  });
+  return Object.values(groups).map(g=>({
+    type:g.type, count:g.count,
+    avgRisk: Math.round(g.riskSum/g.count),
+    avgCostOverrunPct: +(g.costOverrunSum/g.count).toFixed(1),
+    avgDelayPct: +(g.delaySum/g.count).toFixed(1),
+  })).sort((a,b)=>b.avgRisk-a.avgRisk);
+}
+
+function projectPercentile(project, projects){
+  const rows = withAI(projects).filter(p=>p.type===project.type);
+  if(rows.length<2) return null;
+  const pRisk = runAIAnalysis(project).overallRisk;
+  const worse = rows.filter(p=>p.ai.overallRisk <= pRisk).length;
+  return Math.round((worse/rows.length)*100);
+}
+
+const DRIVER_LABELS = ["Actual progress behind schedule","Delayed milestones","Expenditure vs. planned progress","Prior delay history","Resource utilization gap","Contractor performance"];
+
+function getPortfolioDrivers(projects, onlyAtRisk){
+  const rows = withAI(projects).filter(p=> !onlyAtRisk || p.ai.classification==="HIGH" || p.ai.classification==="CRITICAL");
+  if(rows.length===0) return [];
+  const sums = {}; DRIVER_LABELS.forEach(l=>sums[l]=0);
+  rows.forEach(p=>p.ai.factors.forEach(f=>{ sums[f.label]+=f.value; }));
+  return DRIVER_LABELS.map(label=>({label, value: Math.round(sums[label]/rows.length)})).sort((a,b)=>b.value-a.value);
+}
+
+function getSectorDrivers(projects){
+  const groups = {};
+  withAI(projects).forEach(p=>{ (groups[p.type] ||= []).push(p); });
+  return Object.entries(groups).map(([type,rows])=>{
+    const sums={}; DRIVER_LABELS.forEach(l=>sums[l]=0);
+    rows.forEach(p=>p.ai.factors.forEach(f=>{sums[f.label]+=f.value;}));
+    const top = DRIVER_LABELS.map(l=>({label:l,value:Math.round(sums[l]/rows.length)})).sort((a,b)=>b.value-a.value)[0];
+    return {type, topDriver: top.label, value: top.value, count: rows.length};
+  }).sort((a,b)=>b.value-a.value);
+}
+
+/* ---------------- Project Intelligence Assistant (rule-based NLU demo) ---------------- */
+/* Pattern-matches the question against the same project + risk dataset used
+   across the app. Swap this function for a real LLM call (e.g. Claude with
+   tool-use/function-calling over this dataset) without changing the chat UI. */
+function answerAssistantQuery(query, projects){
+  const q = query.toLowerCase();
+  const rows = withAI(projects);
+  const proj = rows.find(p=> q.includes(p.id.toLowerCase()) || q.includes(p.name.toLowerCase().split(" ")[0]));
+  const mentionedState = [...new Set(projects.map(p=>p.state))].find(s=>q.includes(s.toLowerCase()));
+  const mentionedType = [...new Set(projects.map(p=>p.type))].find(t=>q.includes(t.toLowerCase())||q.includes(t.split(" ")[0].toLowerCase()));
+
+  if(proj){
+    const ai = proj.ai;
+    return `${proj.name} (${proj.location}, ${proj.state}) is currently ${ai.classification} risk at ${ai.overallRisk}%. `+
+      `Projected cost overrun: ${fmtCr(ai.estCostOverrunCr)}. Projected additional delay: ${ai.estDelayMonths} months. `+
+      `Top driver: ${ai.factors[0].label}. Recommended action: ${ai.actions[0]}`;
+  }
+  if(/highest risk|most at risk|top risk|critical project/.test(q)){
+    const top = [...rows].sort((a,b)=>b.ai.overallRisk-a.ai.overallRisk).slice(0,3);
+    return `Highest-risk projects right now: `+top.map(p=>`${p.name} (${p.ai.overallRisk}%, ${p.ai.classification})`).join("; ")+".";
+  }
+  if(mentionedState){
+    const inState = rows.filter(p=>p.state===mentionedState);
+    const avgRisk = Math.round(inState.reduce((s,p)=>s+p.ai.overallRisk,0)/(inState.length||1));
+    const worst = inState.length? [...inState].sort((a,b)=>b.ai.overallRisk-a.ai.overallRisk)[0] : null;
+    return `${mentionedState} has ${inState.length} tracked project(s), average risk ${avgRisk}%.`+(worst?` Highest risk there: ${worst.name}.`:"");
+  }
+  if(mentionedType){
+    const bench = getSectorBenchmarks(projects).find(b=>b.type===mentionedType);
+    return bench? `${mentionedType}: ${bench.count} project(s), average risk ${bench.avgRisk}%, average cost overrun ${bench.avgCostOverrunPct}%, average delay ${bench.avgDelayPct}%.` : `No data found for ${mentionedType}.`;
+  }
+  if(/cost overrun|budget/.test(q)){
+    const worst = [...rows].sort((a,b)=>b.ai.estCostOverrunCr-a.ai.estCostOverrunCr)[0];
+    return `The largest projected cost overrun is on ${worst.name} at ${fmtCr(worst.ai.estCostOverrunCr)}. `+
+      `${rows.filter(p=>p.ai.costRisk>=51).length} of ${rows.length} projects show elevated cost risk.`;
+  }
+  if(/delay|schedule/.test(q)){
+    const worst = [...rows].sort((a,b)=>b.ai.estDelayMonths-a.ai.estDelayMonths)[0];
+    return `The largest projected schedule slip is on ${worst.name}, estimated at ${worst.ai.estDelayMonths} additional months.`;
+  }
+  if(/driver|why|cause|reason/.test(q)){
+    const drivers = getPortfolioDrivers(projects, true);
+    return drivers.length? `Across HIGH/CRITICAL projects, the leading escalation drivers are: `+drivers.slice(0,3).map(d=>`${d.label} (${d.value}%)`).join(", ")+"." : "Not enough at-risk projects to compute driver trends.";
+  }
+  const counts = {LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+  rows.forEach(p=>counts[p.ai.classification]++);
+  return `Portfolio snapshot: ${projects.length} projects — ${counts.CRITICAL} critical, ${counts.HIGH} high, ${counts.MEDIUM} medium, ${counts.LOW} low risk. `+
+    `Try asking about a specific project, a state, a sector, "highest risk projects", "cost overrun", "delay", or "drivers".`;
+}
+
 /* ---------------- Tiny chart primitives (dependency-free SVG) ---------------- */
 function Gauge({value,color,label,sub,size=150}){
   const r=(size/2)-14, c=size/2, circ=2*Math.PI*r;
@@ -227,6 +333,9 @@ function Sidebar({page,setPage,collapsed,setCollapsed}){
     ["add","➕","Add Project"],
     ["ai","🤖","AI Risk Analysis"],
     ["warnings","🚨","Early Warnings"],
+    ["benchmarking","📈","Benchmarking"],
+    ["drivers","🧩","Driver Analysis"],
+    ["assistant","💬","AI Assistant"],
     ["reports","📊","Reports"],
     ["settings","⚙️","Settings"],
   ];
@@ -965,6 +1074,165 @@ function ProjectDetailsPage({project,alerts}){
   );
 }
 
+/* ---------------- Benchmarking & Comparative Analytics ---------------- */
+function BenchmarkingPage({projects}){
+  const [selected,setSelected]=useState(projects[0]?.id);
+  const bench = useMemo(()=>getSectorBenchmarks(projects),[projects]);
+  const project = projects.find(p=>p.id===selected);
+  const pct = project? projectPercentile(project,projects) : null;
+  const ai = project && runAIAnalysis(project);
+  const maxRisk = Math.max(...bench.map(b=>b.avgRisk),1);
+  const sectorAvg = project ? bench.find(b=>b.type===project.type)?.avgRisk : null;
+
+  return (
+    <div className="p-6 space-y-4 fadein">
+      <div className="card rounded-lg p-5">
+        <div className="text-sm font-semibold mb-1" style={{color:"var(--navy)"}}>Sector Benchmarking</div>
+        <div className="text-[11px] text-slate-400 mb-4">Average risk, cost overrun and delay by project type, compared across the tracked portfolio.</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] text-slate-500 border-b" style={{borderColor:"var(--border)"}}>
+                <th className="py-2 pr-3">Sector / Type</th><th className="py-2 pr-3">Projects</th>
+                <th className="py-2 pr-3">Avg. Risk</th><th className="py-2 pr-3">Avg. Cost Overrun</th><th className="py-2 pr-3">Avg. Delay</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bench.map(b=>(
+                <tr key={b.type} className="border-b last:border-0" style={{borderColor:"var(--border)"}}>
+                  <td className="py-2.5 pr-3 font-medium">{b.type}</td>
+                  <td className="py-2.5 pr-3 text-slate-500">{b.count}</td>
+                  <td className="py-2.5 pr-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-24 rounded-full bg-slate-100 overflow-hidden"><div className="h-full rounded-full" style={{width:`${(b.avgRisk/maxRisk)*100}%`,background:b.avgRisk>=51?"var(--r)":b.avgRisk>=31?"var(--o)":"var(--g)"}}/></div>
+                      <span className="font-mono text-xs">{b.avgRisk}%</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3 font-mono" style={{color:b.avgCostOverrunPct>0?"var(--r)":"var(--g)"}}>{b.avgCostOverrunPct>0?"+":""}{b.avgCostOverrunPct}%</td>
+                  <td className="py-2.5 pr-3 font-mono" style={{color:b.avgDelayPct>0?"var(--r)":"var(--g)"}}>{b.avgDelayPct>0?"+":""}{b.avgDelayPct}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card rounded-lg p-5">
+        <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Compare a Project Against Its Sector</div>
+        <select value={selected} onChange={e=>setSelected(e.target.value)} className="text-sm px-3 py-2 rounded-md border bg-white mb-4" style={{borderColor:"var(--border)"}}>
+          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {project && ai && (
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div><div className="text-xs text-slate-400">This project's risk</div><div className="font-display font-bold text-lg" style={{color:RISK_COLORS[ai.classification]}}>{ai.overallRisk}%</div></div>
+            <div><div className="text-xs text-slate-400">Sector average</div><div className="font-display font-bold text-lg" style={{color:"var(--navy)"}}>{sectorAvg ?? "—"}%</div></div>
+            <div><div className="text-xs text-slate-400">Percentile within {project.type}</div><div className="font-display font-bold text-lg" style={{color:"var(--navy)"}}>{pct!==null? `${pct}th`:"n/a (only one of its type)"}</div></div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Cost Escalation Driver Analysis ---------------- */
+function DriverAnalysisPage({projects}){
+  const [scope,setScope]=useState("atrisk");
+  const drivers = useMemo(()=>getPortfolioDrivers(projects, scope==="atrisk"),[projects,scope]);
+  const sectorDrivers = useMemo(()=>getSectorDrivers(projects),[projects]);
+
+  return (
+    <div className="p-6 space-y-4 fadein">
+      <div className="card rounded-lg p-5">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+          <div className="text-sm font-semibold" style={{color:"var(--navy)"}}>Portfolio-Wide Escalation Drivers</div>
+          <select value={scope} onChange={e=>setScope(e.target.value)} className="text-xs px-2.5 py-1.5 rounded-md border bg-white" style={{borderColor:"var(--border)"}}>
+            <option value="atrisk">HIGH / CRITICAL projects only</option>
+            <option value="all">All projects</option>
+          </select>
+        </div>
+        <div className="text-[11px] text-slate-400 mb-4">Average contribution of each risk factor, aggregated across {scope==="atrisk"?"at-risk":"all tracked"} projects.</div>
+        {drivers.length? <HBarChart data={drivers} colorFn={d=>d.value>60?"var(--r)":d.value>35?"var(--o)":"var(--accent)"}/> : <div className="text-sm text-slate-400">No at-risk projects to analyze.</div>}
+      </div>
+
+      <div className="card rounded-lg p-5">
+        <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Leading Driver by Sector</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] text-slate-500 border-b" style={{borderColor:"var(--border)"}}>
+                <th className="py-2 pr-3">Sector / Type</th><th className="py-2 pr-3">Projects</th><th className="py-2 pr-3">Top Escalation Driver</th><th className="py-2 pr-3">Avg. Contribution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sectorDrivers.map(s=>(
+                <tr key={s.type} className="border-b last:border-0" style={{borderColor:"var(--border)"}}>
+                  <td className="py-2.5 pr-3 font-medium">{s.type}</td>
+                  <td className="py-2.5 pr-3 text-slate-500">{s.count}</td>
+                  <td className="py-2.5 pr-3">{s.topDriver}</td>
+                  <td className="py-2.5 pr-3 font-mono font-semibold">{s.value}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Project Intelligence Assistant ---------------- */
+function AssistantPage({projects}){
+  const [messages,setMessages]=useState([
+    {role:"assistant", text:"Ask me about any project, state, sector, risk driver, or the overall portfolio."}
+  ]);
+  const [input,setInput]=useState("");
+  const scrollRef = useRef(null);
+  useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; },[messages]);
+
+  const send = (text) => {
+    const q = (text||input).trim();
+    if(!q) return;
+    const answer = answerAssistantQuery(q, projects);
+    setMessages(m=>[...m, {role:"user",text:q}, {role:"assistant",text:answer}]);
+    setInput("");
+  };
+
+  const suggestions = ["Which projects are highest risk?","Status of projects in Maharashtra","Benchmark Bridge Construction","What's driving cost overruns?"];
+
+  return (
+    <div className="p-6 fadein max-w-3xl">
+      <div className="card rounded-lg overflow-hidden flex flex-col" style={{height:"560px"}}>
+        <div className="px-5 py-3 border-b flex items-center justify-between" style={{borderColor:"var(--border)"}}>
+          <div className="text-sm font-semibold" style={{color:"var(--navy)"}}>🤖 Project Intelligence Assistant</div>
+          <span className="text-[10px] font-mono px-2 py-1 rounded-md" style={{background:"#F3F7FF",color:"var(--navy2)"}}>rule-based demo · LLM-ready</span>
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3">
+          {messages.map((m,i)=>(
+            <div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
+              <div className={`max-w-[80%] text-sm px-3.5 py-2.5 rounded-lg ${m.role==="user"?"text-white":""}`}
+                style={m.role==="user"?{background:"var(--navy)"}:{background:"#F3F6FA",color:"var(--text)"}}>
+                {m.text}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 py-2 flex flex-wrap gap-1.5 border-t" style={{borderColor:"var(--border)"}}>
+          {suggestions.map(s=><button key={s} onClick={()=>send(s)} className="text-[11px] px-2.5 py-1 rounded-full border text-slate-500 hover:bg-slate-50" style={{borderColor:"var(--border)"}}>{s}</button>)}
+        </div>
+        <div className="p-3 flex gap-2 border-t" style={{borderColor:"var(--border)"}}>
+          <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
+            placeholder="Ask about a project, state, sector or risk driver…"
+            className="flex-1 text-sm px-3 py-2 rounded-md border" style={{borderColor:"var(--border)"}}/>
+          <button onClick={()=>send()} className="px-4 py-2 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>Send</button>
+        </div>
+      </div>
+      <div className="text-[11px] text-slate-400 mt-2">
+        Answers come from pattern-matching against the same project dataset and risk engine used across the app. The architecture is ready to route these queries through a real LLM (e.g. Claude with tool-use) for open-ended natural-language reasoning over live PAIMANA data.
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Reports ---------------- */
 function ReportsPage({projects}){
   const [selected,setSelected]=useState(projects[0]?.id);
@@ -1043,10 +1311,29 @@ function SettingsPage(){
           <span className="text-slate-600">Explainability</span>
           <span className="font-mono text-xs px-2 py-1 rounded-md" style={{background:"#F3F7FF",color:"var(--navy2)"}}>SHAP-compatible output</span>
         </div>
+        <div className="text-sm font-semibold pt-3 border-t" style={{color:"var(--navy)",borderColor:"var(--border)"}}>Project Intelligence Assistant</div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">Assistant backend</span>
+          <span className="font-mono text-xs px-2 py-1 rounded-md" style={{background:"#F3F7FF",color:"var(--navy2)"}}>rule-based NLU demo</span>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">Ready for LLM (e.g. Claude tool-use)</span>
+          <span className="text-xs font-semibold" style={{color:"var(--g)"}}>✓ Architecture ready</span>
+        </div>
         <div className="text-sm font-semibold pt-3 border-t" style={{color:"var(--navy)",borderColor:"var(--border)"}}>Notification Thresholds</div>
         <label className="flex items-center justify-between text-sm text-slate-600">Alert on HIGH risk <input type="checkbox" defaultChecked/></label>
         <label className="flex items-center justify-between text-sm text-slate-600">Alert on CRITICAL risk <input type="checkbox" defaultChecked/></label>
         <label className="flex items-center justify-between text-sm text-slate-600">Weekly summary email <input type="checkbox"/></label>
+      </div>
+      <div className="card rounded-lg p-6 mt-4">
+        <div className="text-sm font-semibold mb-2" style={{color:"var(--navy)"}}>Scope vs. Prototype</div>
+        <div className="text-xs text-slate-500 leading-relaxed">
+          This build is a self-contained front-end demo (React, no backend) covering all nine SIH26103 outcome areas —
+          cost/time overrun prediction, risk scoring, early warnings, an AI dashboard, benchmarking, driver analysis and
+          a project intelligence assistant — using synthetic sample data in place of a live PAIMANA/OCMS/CUF feed.
+          The prediction engine and assistant are both isolated behind single functions (<span className="font-mono">runAIAnalysis()</span> and{" "}
+          <span className="font-mono">answerAssistantQuery()</span>) so they can be swapped for a trained ML model and a real LLM without touching the UI.
+        </div>
       </div>
     </div>
   );
@@ -1081,7 +1368,7 @@ function App(){
     setPage("ai");
   };
 
-  const titles = {dashboard:"Dashboard",projects:"Projects",add:"Add Project",ai:"AI Risk Analysis",warnings:"Early Warning System",reports:"Reports",settings:"Settings",details:"Project Details"};
+  const titles = {dashboard:"Dashboard",projects:"Projects",add:"Add Project",ai:"AI Risk Analysis",warnings:"Early Warning System",benchmarking:"Benchmarking & Comparative Analytics",drivers:"Cost Escalation Driver Analysis",assistant:"Project Intelligence Assistant",reports:"Reports",settings:"Settings",details:"Project Details"};
 
   return (
     <div className="flex" style={{background:"var(--bg)"}}>
@@ -1093,6 +1380,9 @@ function App(){
         {page==="add" && <AddProjectPage onAnalyze={onAnalyze}/>}
         {page==="ai" && <AIAnalysisPage projects={projects} selectedId={selectedProjectId} setSelectedId={setSelectedProjectId}/>}
         {page==="warnings" && <EarlyWarningsPage projects={projects} alerts={alerts} setAlerts={setAlerts}/>}
+        {page==="benchmarking" && <BenchmarkingPage projects={projects}/>}
+        {page==="drivers" && <DriverAnalysisPage projects={projects}/>}
+        {page==="assistant" && <AssistantPage projects={projects}/>}
         {page==="reports" && <ReportsPage projects={projects}/>}
         {page==="settings" && <SettingsPage/>}
         {page==="details" && <ProjectDetailsPage project={projects.find(p=>p.id===detailsId)} alerts={alerts}/>}
