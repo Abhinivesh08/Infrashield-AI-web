@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>InfraShield AI — SIH26103</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root{
+    --navy:#0A2540; --navy2:#123A63; --navy3:#0E2E52;
+    --bg:#F3F6FA; --surface:#FFFFFF; --border:#DCE3EC;
+    --text:#101828; --muted:#5A6B84;
+    --accent:#0F6FFF;
+    --g:#178A4C; --y:#C98A00; --o:#D9660B; --r:#D2291F;
+  }
+  *{font-family:'Inter',sans-serif;}
+  .font-display{font-family:'Space Grotesk',sans-serif;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+  body{background:var(--bg); color:var(--text);}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#C7D1DE;border-radius:4px;}
+  .card{background:var(--surface);border:1px solid var(--border);}
+  .risk-strip{width:4px;}
+  @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+  .scan-anim{animation:scan 1.1s ease-in-out infinite;}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .fadein{animation:fadein .35s ease-out;}
+  input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 3px rgba(15,111,255,0.15);border-color:var(--accent);}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useMemo,useRef,useEffect} = React;
+
+/* ---------------- Sample Data ---------------- */
+const SAMPLE_PROJECTS = [
+  {id:"P-1001",name:"NH-44 Highway Widening Phase II",type:"Highway Construction",state:"Madhya Pradesh",location:"Bhopal–Indore Corridor",status:"In Progress",plannedCost:340,currentExpenditure:298,plannedDuration:24,actualDuration:27,plannedProgress:82,actualProgress:64,totalMilestones:10,completedMilestones:6,delayedMilestones:3,resourcesPlanned:100,resourcesUsed:88,previousDelays:2,contractorPerformance:58},
+  {id:"P-1002",name:"Konkan Railway Track Doubling",type:"Railway Expansion",state:"Maharashtra",location:"Ratnagiri–Sindhudurg",status:"In Progress",plannedCost:512,currentExpenditure:361,plannedDuration:36,actualDuration:34,plannedProgress:68,actualProgress:61,totalMilestones:12,completedMilestones:7,delayedMilestones:1,resourcesPlanned:140,resourcesUsed:132,previousDelays:0,contractorPerformance:81},
+  {id:"P-1003",name:"Jal Jeevan Rural Water Supply Grid",type:"Water Supply Project",state:"Rajasthan",location:"Jodhpur District",status:"At Risk",plannedCost:128,currentExpenditure:121,plannedDuration:18,actualDuration:21,plannedProgress:75,actualProgress:52,totalMilestones:8,completedMilestones:4,delayedMilestones:3,resourcesPlanned:60,resourcesUsed:41,previousDelays:3,contractorPerformance:44},
+  {id:"P-1004",name:"Solapur Thermal Power Plant Unit-3",type:"Power Plant",state:"Maharashtra",location:"Solapur",status:"In Progress",plannedCost:890,currentExpenditure:602,plannedDuration:42,actualDuration:39,plannedProgress:58,actualProgress:55,totalMilestones:14,completedMilestones:8,delayedMilestones:1,resourcesPlanned:220,resourcesUsed:205,previousDelays:1,contractorPerformance:76},
+  {id:"P-1005",name:"Ganga Barrage Bridge Reconstruction",type:"Bridge Construction",state:"Uttar Pradesh",location:"Kanpur",status:"Critical",plannedCost:96,currentExpenditure:104,plannedDuration:14,actualDuration:19,plannedProgress:90,actualProgress:58,totalMilestones:6,completedMilestones:3,delayedMilestones:3,resourcesPlanned:45,resourcesUsed:39,previousDelays:4,contractorPerformance:31},
+  {id:"P-1006",name:"Pune Metro Line 3 Underground Corridor",type:"Metro Project",state:"Maharashtra",location:"Pune",status:"At Risk",plannedCost:1240,currentExpenditure:940,plannedDuration:48,actualDuration:44,plannedProgress:70,actualProgress:53,totalMilestones:16,completedMilestones:8,delayedMilestones:4,resourcesPlanned:310,resourcesUsed:268,previousDelays:2,contractorPerformance:52},
+  {id:"P-1007",name:"Guwahati International Airport Expansion",type:"Airport Expansion",state:"Assam",location:"Guwahati",status:"In Progress",plannedCost:410,currentExpenditure:255,plannedDuration:30,actualDuration:28,plannedProgress:60,actualProgress:57,totalMilestones:10,completedMilestones:6,delayedMilestones:0,resourcesPlanned:95,resourcesUsed:90,previousDelays:0,contractorPerformance:88},
+  {id:"P-1008",name:"Chenab Valley Rail Bridge Approach Road",type:"Highway Construction",state:"Jammu & Kashmir",location:"Reasi",status:"Critical",plannedCost:210,currentExpenditure:198,plannedDuration:20,actualDuration:25,plannedProgress:88,actualProgress:49,totalMilestones:9,completedMilestones:4,delayedMilestones:4,resourcesPlanned:80,resourcesUsed:52,previousDelays:3,contractorPerformance:36},
+  {id:"P-1009",name:"Chennai Desalination Plant Upgrade",type:"Water Supply Project",state:"Tamil Nadu",location:"Chennai",status:"In Progress",plannedCost:175,currentExpenditure:112,plannedDuration:22,actualDuration:21,plannedProgress:54,actualProgress:51,totalMilestones:8,completedMilestones:4,delayedMilestones:1,resourcesPlanned:52,resourcesUsed:48,previousDelays:1,contractorPerformance:70},
+  {id:"P-1010",name:"Kolkata East-West Bridge Corridor",type:"Bridge Construction",state:"West Bengal",location:"Kolkata",status:"At Risk",plannedCost:265,currentExpenditure:231,plannedDuration:26,actualDuration:28,plannedProgress:80,actualProgress:60,totalMilestones:10,completedMilestones:6,delayedMilestones:2,resourcesPlanned:70,resourcesUsed:61,previousDelays:2,contractorPerformance:55},
+];
+
+const MONTHLY_DELAY_TREND = [
+  {m:"Mar",avgDelay:1.8},{m:"Apr",avgDelay:2.1},{m:"May",avgDelay:2.4},
+  {m:"Jun",avgDelay:2.9},{m:"Jul",avgDelay:3.2},{m:"Aug",avgDelay:3.6},{m:"Sep",avgDelay:3.9},
+];
+
+/* ---------------- Demo Prediction Engine ---------------- */
+/* Clearly-separated mock ML pipeline. Swap this module out for a trained
+   XGBoost / Scikit-learn service without touching any UI component. */
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+
+function runAIAnalysis(p){
+  const progressGap = p.plannedProgress - p.actualProgress;
+  const milestoneRatio = p.totalMilestones ? p.delayedMilestones / p.totalMilestones : 0;
+  const resourceGap = p.resourcesPlanned ? (p.resourcesPlanned - p.resourcesUsed)/p.resourcesPlanned : 0;
+  const spendRatio = p.plannedCost ? p.currentExpenditure / p.plannedCost : 1;
+  const expectedSpendRatio = p.plannedProgress ? p.actualProgress / p.plannedProgress : 1;
+
+  const delayRisk = clamp(
+    progressGap*1.9 + milestoneRatio*100*0.55 + p.previousDelays*6 + (100-p.contractorPerformance)*0.25, 0, 100
+  );
+  const costRisk = clamp(
+    clamp((spendRatio - expectedSpendRatio)*180,0,60) + (100-p.contractorPerformance)*0.3 + p.previousDelays*5, 0, 100
+  );
+  const overallRisk = Math.round(clamp(delayRisk*0.5 + costRisk*0.35 + resourceGap*100*0.15, 0, 100));
+
+  let classification = "LOW";
+  if(overallRisk>=76) classification="CRITICAL";
+  else if(overallRisk>=51) classification="HIGH";
+  else if(overallRisk>=31) classification="MEDIUM";
+
+  const estDelayMonths = +clamp((delayRisk/100)*p.plannedDuration*0.35,0,24).toFixed(1);
+  const estCostOverrunCr = +clamp((costRisk/100)*p.plannedCost*0.22,0,p.plannedCost).toFixed(1);
+
+  const factors = [
+    {label:"Actual progress behind schedule", value: clamp(progressGap,0,100)},
+    {label:"Delayed milestones", value: Math.round(milestoneRatio*100)},
+    {label:"Expenditure vs. planned progress", value: Math.round(clamp((spendRatio-expectedSpendRatio)*100,0,100))},
+    {label:"Prior delay history", value: clamp(p.previousDelays*18,0,100)},
+    {label:"Resource utilization gap", value: Math.round(clamp(resourceGap*100,0,100))},
+    {label:"Contractor performance", value: 100-p.contractorPerformance},
+  ].sort((a,b)=>b.value-a.value);
+
+  const reasons = [];
+  if(progressGap>5) reasons.push(`Actual progress is ${Math.round(progressGap)}% behind the planned schedule.`);
+  if(p.delayedMilestones>0) reasons.push(`${p.delayedMilestones} of ${p.totalMilestones} milestones are currently delayed.`);
+  if(spendRatio>expectedSpendRatio+0.05) reasons.push("Current expenditure is running ahead of physical progress.");
+  if(p.previousDelays>0) reasons.push(`${p.previousDelays} prior delay event${p.previousDelays>1?'s':''} detected on this project.`);
+  if(resourceGap>0.1) reasons.push("Resource deployment is below the planned allocation.");
+  if(p.contractorPerformance<60) reasons.push("Contractor performance rating is below the acceptable threshold.");
+  if(reasons.length===0) reasons.push("No material risk indicators detected — project is tracking to plan.");
+
+  const actions = [];
+  if(p.delayedMilestones>0) actions.push("Review delayed milestones with the executing agency.");
+  if(spendRatio>expectedSpendRatio) actions.push("Investigate the cause of the cost increase.");
+  if(resourceGap>0.1) actions.push("Reallocate manpower and equipment to critical work fronts.");
+  if(progressGap>10) actions.push("Update the project schedule and recovery plan.");
+  if(overallRisk>=51) actions.push("Assign a responsible nodal officer for immediate intervention.");
+  if(actions.length===0) actions.push("Continue routine monitoring — no intervention required.");
+
+  return {delayRisk:Math.round(delayRisk), costRisk:Math.round(costRisk), overallRisk, classification,
+          estDelayMonths, estCostOverrunCr, factors, reasons, actions};
+}
+
+const RISK_COLORS = {LOW:"#178A4C", MEDIUM:"#C98A00", HIGH:"#D9660B", CRITICAL:"#D2291F"};
+const RISK_DOT = {LOW:"🟢", MEDIUM:"🟡", HIGH:"🟠", CRITICAL:"🔴"};
+const fmtCr = n => `₹${n.toLocaleString('en-IN',{maximumFractionDigits:1})} Cr`;
+
+/* ---------------- Tiny chart primitives (dependency-free SVG) ---------------- */
+function Gauge({value,color,label,sub,size=150}){
+  const r=(size/2)-14, c=size/2, circ=2*Math.PI*r;
+  const pct = clamp(value,0,100)/100;
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size}>
+        <circle cx={c} cy={c} r={r} stroke="#E7ECF3" strokeWidth="12" fill="none"/>
+        <circle cx={c} cy={c} r={r} stroke={color} strokeWidth="12" fill="none"
+          strokeDasharray={circ} strokeDashoffset={circ*(1-pct)} strokeLinecap="round"
+          transform={`rotate(-90 ${c} ${c})`} style={{transition:"stroke-dashoffset .8s ease"}}/>
+        <text x={c} y={c-2} textAnchor="middle" fontSize="30" fontWeight="700" fill="var(--text)" fontFamily="IBM Plex Mono">{value}%</text>
+        <text x={c} y={c+20} textAnchor="middle" fontSize="11" fill="var(--muted)">{sub||""}</text>
+      </svg>
+      <div className="text-sm font-semibold mt-1" style={{color:"var(--navy)"}}>{label}</div>
+    </div>
+  );
+}
+
+function HBarChart({data,max,colorFn}){
+  const m = max || Math.max(...data.map(d=>d.value),1);
+  return (
+    <div className="space-y-3">
+      {data.map((d,i)=>(
+        <div key={i}>
+          <div className="flex justify-between text-xs mb-1"><span className="text-slate-600">{d.label}</span><span className="font-mono font-semibold">{d.value}%</span></div>
+          <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full rounded-full" style={{width:`${(d.value/m)*100}%`, background: colorFn?colorFn(d):"var(--accent)", transition:"width .6s ease"}}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupedBars({data,keys,colors,fmt}){
+  const max = Math.max(...data.flatMap(d=>keys.map(k=>d[k])))*1.15;
+  return (
+    <div className="flex items-end gap-4 h-48 pt-4">
+      {data.map((d,i)=>(
+        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+          <div className="flex items-end gap-1 h-40 w-full justify-center">
+            {keys.map((k,ki)=>(
+              <div key={ki} className="w-3.5 rounded-t-sm" title={`${k}: ${fmt?fmt(d[k]):d[k]}`}
+                style={{height:`${(d[k]/max)*100}%`, background:colors[ki], transition:"height .6s ease"}}/>
+            ))}
+          </div>
+          <div className="text-[10px] text-slate-500 text-center leading-tight">{d.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DonutChart({segments,size=150}){
+  const total = segments.reduce((s,x)=>s+x.value,0)||1;
+  const r=size/2-14, c=size/2; let acc=0;
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={size} height={size}>
+        {segments.map((s,i)=>{
+          const frac=s.value/total; const dash=2*Math.PI*r;
+          const off = dash*(1-frac); const rot = -90 + acc*360;
+          acc += frac;
+          return <circle key={i} cx={c} cy={c} r={r} fill="none" stroke={s.color} strokeWidth="20"
+            strokeDasharray={dash} strokeDashoffset={off} transform={`rotate(${rot} ${c} ${c})`}/>;
+        })}
+        <text x={c} y={c+5} textAnchor="middle" fontSize="20" fontWeight="700" fontFamily="IBM Plex Mono">{total}</text>
+      </svg>
+      <div className="space-y-1.5">
+        {segments.map((s,i)=>(
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{background:s.color}}/>
+            <span className="text-slate-600">{s.label}</span>
+            <span className="font-mono font-semibold ml-auto">{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Sparkline({points,color}){
+  const w=280,h=90,max=Math.max(...points),min=Math.min(...points);
+  const pts = points.map((p,i)=>{
+    const x = (i/(points.length-1))*(w-20)+10;
+    const y = h-10-((p-min)/((max-min)||1))*(h-30);
+    return `${x},${y}`;
+  }).join(" ");
+  return (
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+      {points.map((p,i)=>{
+        const x=(i/(points.length-1))*(w-20)+10, y=h-10-((p-min)/((max-min)||1))*(h-30);
+        return <circle key={i} cx={x} cy={y} r="3" fill={color}/>;
+      })}
+    </svg>
+  );
+}
+
+/* ---------------- Layout ---------------- */
+function Sidebar({page,setPage,collapsed,setCollapsed}){
+  const items = [
+    ["dashboard","🏠","Dashboard"],
+    ["projects","📁","Projects"],
+    ["add","➕","Add Project"],
+    ["ai","🤖","AI Risk Analysis"],
+    ["warnings","🚨","Early Warnings"],
+    ["reports","📊","Reports"],
+    ["settings","⚙️","Settings"],
+  ];
+  return (
+    <div className={`${collapsed?"w-16":"w-60"} shrink-0 transition-all duration-200 h-screen sticky top-0 flex flex-col`} style={{background:"var(--navy)"}}>
+      <div className="flex items-center gap-2 px-4 h-16 border-b border-white/10">
+        <div className="w-8 h-8 rounded-md flex items-center justify-center font-display font-bold text-sm" style={{background:"var(--accent)",color:"white"}}>IS</div>
+        {!collapsed && <span className="text-white font-display font-semibold text-[15px] tracking-tight">InfraShield AI</span>}
+      </div>
+      <nav className="flex-1 py-3">
+        {items.map(([key,icon,label])=>(
+          <button key={key} onClick={()=>setPage(key)}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors"
+            style={{
+              color: page===key? "white":"#93A7C4",
+              background: page===key? "rgba(15,111,255,0.18)":"transparent",
+              borderRight: page===key? "3px solid var(--accent)":"3px solid transparent"
+            }}>
+            <span className="text-base">{icon}</span>
+            {!collapsed && <span className="font-medium">{label}</span>}
+          </button>
+        ))}
+      </nav>
+      <button onClick={()=>setCollapsed(!collapsed)} className="text-[#93A7C4] hover:text-white text-xs py-3 border-t border-white/10">
+        {collapsed?"»":"« Collapse"}
+      </button>
+    </div>
+  );
+}
+
+function TopBar({title,onLogout}){
+  return (
+    <div className="h-16 sticky top-0 z-10 flex items-center justify-between px-6 border-b" style={{background:"var(--surface)", borderColor:"var(--border)"}}>
+      <div>
+        <h1 className="font-display font-semibold text-lg" style={{color:"var(--navy)"}}>{title}</h1>
+      </div>
+      <div className="flex items-center gap-4">
+        <input placeholder="Search projects, alerts…" className="hidden md:block w-64 text-sm px-3 py-1.5 rounded-md border" style={{borderColor:"var(--border)"}}/>
+        <span className="text-lg cursor-pointer" title="Notifications">🔔</span>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold" style={{background:"var(--navy2)"}}>PO</div>
+          <span className="text-sm text-slate-600 hidden sm:block">Project Officer</span>
+        </div>
+        <button onClick={onLogout} className="text-xs font-semibold px-3 py-1.5 rounded-md border hover:bg-slate-50" style={{borderColor:"var(--border)"}}>Logout</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Password field with show/hide toggle ---------------- */
+function EyeIcon({open}){
+  return open ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-11-8-11-8a19.4 19.4 0 015.06-6.06M9.9 4.24A10.94 10.94 0 0112 4c7 0 11 8 11 8a19.5 19.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  );
+}
+
+function PasswordField({value, onChange, defaultValue, placeholder, className, style}){
+  const [show,setShow]=useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={show?"text":"password"}
+        value={value}
+        defaultValue={defaultValue}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={(className||"") + " pr-10"}
+        style={style}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={()=>setShow(s=>!s)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded"
+        style={{color:"var(--muted)"}}
+        aria-label={show?"Hide password":"Show password"}
+        title={show?"Hide password":"Show password"}
+      >
+        <EyeIcon open={show}/>
+      </button>
+    </div>
+  );
+}
+
+/* ---------------- Login ---------------- */
+function LoginBrand(){
+  return (
+    <div className="text-center mb-6">
+      <div className="w-14 h-14 mx-auto rounded-xl flex items-center justify-center font-display font-bold text-xl mb-3" style={{background:"var(--accent)",color:"white"}}>IS</div>
+      <div className="text-white font-display font-semibold text-2xl tracking-tight">InfraShield AI</div>
+      <div className="text-[#93A7C4] text-sm mt-1">Predict Delays. Prevent Overruns. Protect Infrastructure.</div>
+    </div>
+  );
+}
+
+function LoginPage({onLogin}){
+  const [remember,setRemember]=useState(true);
+  /* view: login | fp-email | fp-code | fp-reset | fp-success */
+  const [view,setView]=useState("login");
+  const [fpEmail,setFpEmail]=useState("officer.pmo@gov.in");
+  const [fpError,setFpError]=useState("");
+  const [genCode,setGenCode]=useState("");
+  const [codeInput,setCodeInput]=useState("");
+  const [pw1,setPw1]=useState("");
+  const [pw2,setPw2]=useState("");
+  const [resendTick,setResendTick]=useState(0);
+  const [currentPassword,setCurrentPassword]=useState("password123");
+  const [loginPassword,setLoginPassword]=useState("");
+  const [loginError,setLoginError]=useState("");
+  const [justReset,setJustReset]=useState(false);
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fpEmail.trim());
+
+  function sendCode(){
+    if(!emailValid){ setFpError("Enter a valid email address."); return; }
+    setFpError("");
+    const code = Math.floor(100000 + Math.random()*900000).toString();
+    setGenCode(code);
+    setCodeInput("");
+    setResendTick(t=>t+1);
+    setView("fp-code");
+  }
+
+  function verifyCode(){
+    if(codeInput.trim().length!==6){ setFpError("Enter the 6-digit code."); return; }
+    if(codeInput.trim()!==genCode){ setFpError("Incorrect code. Check the demo code below and try again."); return; }
+    setFpError("");
+    setPw1(""); setPw2("");
+    setView("fp-reset");
+  }
+
+  function attemptLogin(){
+    if(loginPassword.length===0){ setLoginError("Enter your password."); return; }
+    if(loginPassword!==currentPassword){ setLoginError("Incorrect password. If you recently reset it, make sure you're using your new password."); return; }
+    setLoginError("");
+    onLogin();
+  }
+
+  function resetPassword(){
+    if(pw1.length<8){ setFpError("Password must be at least 8 characters."); return; }
+    if(!/[A-Z]/.test(pw1) || !/[0-9]/.test(pw1)){ setFpError("Include at least one uppercase letter and one number."); return; }
+    if(pw1!==pw2){ setFpError("Passwords do not match."); return; }
+    setFpError("");
+    setCurrentPassword(pw1);
+    setJustReset(true);
+    setView("fp-success");
+  }
+
+  function backToLogin(){
+    setView("login"); setFpError(""); setCodeInput(""); setGenCode(""); setPw1(""); setPw2("");
+    setLoginPassword(""); setLoginError("");
+  }
+
+  const pwScore = (()=>{
+    let s=0;
+    if(pw1.length>=8) s++;
+    if(/[A-Z]/.test(pw1)) s++;
+    if(/[0-9]/.test(pw1)) s++;
+    if(/[^A-Za-z0-9]/.test(pw1)) s++;
+    return s;
+  })();
+  const pwScoreColor = ["#D2291F","#D2291F","#C98A00","#178A4C","#178A4C"][pwScore];
+  const pwScoreLabel = ["Very weak","Weak","Fair","Strong","Very strong"][pwScore];
+
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{background:"var(--navy)"}}>
+      <div className="w-full max-w-sm mx-4">
+        <LoginBrand/>
+
+        {view==="login" &&
+          <div className="card rounded-lg p-6 fadein">
+            <div className="text-xs font-semibold text-slate-400 mb-4 tracking-wide">SECURE OFFICIAL LOGIN</div>
+            {justReset &&
+              <div className="rounded-md px-3 py-2 mb-3 text-xs" style={{background:"#E6F4EC", color:"var(--g)", border:"1px solid #BFE3CC"}}>
+                Password updated. Please sign in with your new password.
+              </div>
+            }
+            <label className="text-xs font-medium text-slate-600">Email / Username</label>
+            <input defaultValue="officer.pmo@gov.in" className="w-full mt-1 mb-3 px-3 py-2 text-sm rounded-md border" style={{borderColor:"var(--border)"}}/>
+            <label className="text-xs font-medium text-slate-600">Password</label>
+            <PasswordField value={loginPassword} onChange={e=>{setLoginPassword(e.target.value); if(loginError) setLoginError("");}} className="w-full mt-1 mb-1 px-3 py-2 text-sm rounded-md border" style={{borderColor:"var(--border)"}}/>
+            {loginError && <div className="text-xs mb-2" style={{color:"var(--r)"}}>{loginError}</div>}
+            <div className="flex items-center justify-between mb-4 mt-2">
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}/> Remember me
+              </label>
+              <span onClick={()=>{setFpError(""); setFpEmail("officer.pmo@gov.in"); setJustReset(false); setView("fp-email");}} className="text-xs cursor-pointer hover:underline" style={{color:"var(--accent)"}}>Forgot password?</span>
+            </div>
+            <button onClick={attemptLogin} className="w-full py-2.5 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>Login</button>
+            <button onClick={onLogin} className="w-full py-2.5 mt-2 rounded-md text-sm font-semibold border" style={{borderColor:"var(--accent)", color:"var(--accent)"}}>Continue with Demo Login</button>
+          </div>
+        }
+
+        {view==="fp-email" &&
+          <div className="card rounded-lg p-6 fadein">
+            <div className="text-xs font-semibold text-slate-400 mb-1 tracking-wide">RESET PASSWORD · STEP 1 OF 3</div>
+            <div className="text-sm font-semibold mb-3" style={{color:"var(--text)"}}>Confirm your account email</div>
+            <label className="text-xs font-medium text-slate-600">Email / Username</label>
+            <input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} className="w-full mt-1 mb-2 px-3 py-2 text-sm rounded-md border" style={{borderColor:"var(--border)"}}/>
+            {fpError && <div className="text-xs mb-2" style={{color:"var(--r)"}}>{fpError}</div>}
+            <div className="text-[11px] text-slate-500 mb-4">We'll send a 6-digit verification code to this address.</div>
+            <button onClick={sendCode} className="w-full py-2.5 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>Send reset code</button>
+            <button onClick={backToLogin} className="w-full py-2.5 mt-2 rounded-md text-sm font-semibold border" style={{borderColor:"var(--border)", color:"var(--muted)"}}>Back to login</button>
+          </div>
+        }
+
+        {view==="fp-code" &&
+          <div className="card rounded-lg p-6 fadein">
+            <div className="text-xs font-semibold text-slate-400 mb-1 tracking-wide">RESET PASSWORD · STEP 2 OF 3</div>
+            <div className="text-sm font-semibold mb-3" style={{color:"var(--text)"}}>Enter verification code</div>
+            <div className="text-[11px] text-slate-500 mb-3">Sent to <span className="font-semibold">{fpEmail}</span></div>
+            <div className="rounded-md px-3 py-2 mb-3 text-xs font-mono" style={{background:"#EAF1FF", color:"var(--navy)", border:"1px solid #C9DBFF"}}>
+              Demo mode — in production this code is emailed. Your code: <span className="font-bold tracking-widest">{genCode}</span>
+            </div>
+            <label className="text-xs font-medium text-slate-600">6-digit code</label>
+            <input value={codeInput} onChange={e=>setCodeInput(e.target.value.replace(/[^0-9]/g,"").slice(0,6))} maxLength={6} className="w-full mt-1 mb-2 px-3 py-2 text-sm rounded-md border tracking-[0.3em] font-mono" style={{borderColor:"var(--border)"}} placeholder="000000"/>
+            {fpError && <div className="text-xs mb-2" style={{color:"var(--r)"}}>{fpError}</div>}
+            <div className="flex items-center justify-between mb-4">
+              <span onClick={sendCode} className="text-xs cursor-pointer hover:underline" style={{color:"var(--accent)"}}>Resend code</span>
+              {resendTick>1 && <span className="text-[11px] text-slate-400">New code generated</span>}
+            </div>
+            <button onClick={verifyCode} className="w-full py-2.5 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>Verify code</button>
+            <button onClick={backToLogin} className="w-full py-2.5 mt-2 rounded-md text-sm font-semibold border" style={{borderColor:"var(--border)", color:"var(--muted)"}}>Back to login</button>
+          </div>
+        }
+
+        {view==="fp-reset" &&
+          <div className="card rounded-lg p-6 fadein">
+            <div className="text-xs font-semibold text-slate-400 mb-1 tracking-wide">RESET PASSWORD · STEP 3 OF 3</div>
+            <div className="text-sm font-semibold mb-3" style={{color:"var(--text)"}}>Set a new password</div>
+            <label className="text-xs font-medium text-slate-600">New password</label>
+            <PasswordField value={pw1} onChange={e=>setPw1(e.target.value)} className="w-full mt-1 mb-1 px-3 py-2 text-sm rounded-md border" style={{borderColor:"var(--border)"}}/>
+            {pw1.length>0 &&
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{width:`${pwScore*25}%`, background:pwScoreColor}}></div>
+                </div>
+                <span className="text-[11px] font-medium" style={{color:pwScoreColor}}>{pwScoreLabel}</span>
+              </div>
+            }
+            <label className="text-xs font-medium text-slate-600">Confirm new password</label>
+            <PasswordField value={pw2} onChange={e=>setPw2(e.target.value)} className="w-full mt-1 mb-2 px-3 py-2 text-sm rounded-md border" style={{borderColor:"var(--border)"}}/>
+            {fpError && <div className="text-xs mb-2" style={{color:"var(--r)"}}>{fpError}</div>}
+            <div className="text-[11px] text-slate-500 mb-4">At least 8 characters, one uppercase letter and one number.</div>
+            <button onClick={resetPassword} className="w-full py-2.5 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>Reset password</button>
+            <button onClick={backToLogin} className="w-full py-2.5 mt-2 rounded-md text-sm font-semibold border" style={{borderColor:"var(--border)", color:"var(--muted)"}}>Cancel</button>
+          </div>
+        }
+
+        {view==="fp-success" &&
+          <div className="card rounded-lg p-6 fadein text-center">
+            <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-3" style={{background:"#E6F4EC"}}>
+              <span style={{color:"var(--g)"}} className="text-2xl font-bold">✓</span>
+            </div>
+            <div className="text-sm font-semibold mb-1" style={{color:"var(--text)"}}>Password updated</div>
+            <div className="text-xs text-slate-500 mb-4">Your password has been reset successfully. You can now sign in with your new password.</div>
+            <button onClick={backToLogin} className="w-full py-2.5 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>Back to login</button>
+          </div>
+        }
+
+        <div className="text-center text-[11px] text-[#5A76A0] mt-4">SIH26103 · Prototype for demonstration purposes only</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Dashboard ---------------- */
+function StatCard({label,value,sub,accent}){
+  return (
+    <div className="card rounded-lg p-4 flex items-center gap-3">
+      <div className="risk-strip h-10 rounded-full" style={{background:accent||"var(--accent)"}}/>
+      <div>
+        <div className="text-[11px] text-slate-500 font-medium">{label}</div>
+        <div className="font-display font-bold text-xl" style={{color:"var(--navy)"}}>{value}</div>
+        {sub && <div className="text-[11px] text-slate-400">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+function DashboardPage({projects,goDetails}){
+  const withRisk = useMemo(()=>projects.map(p=>({...p, ai: runAIAnalysis(p)})),[projects]);
+  const counts = {LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+  withRisk.forEach(p=>counts[p.ai.classification]++);
+  const totalBudget = projects.reduce((s,p)=>s+p.plannedCost,0);
+  const avgProgress = Math.round(projects.reduce((s,p)=>s+p.actualProgress,0)/projects.length);
+  const delayed = projects.filter(p=>p.actualDuration>p.plannedDuration).length;
+  const highRisk = withRisk.filter(p=>p.ai.classification==="HIGH"||p.ai.classification==="CRITICAL")
+    .sort((a,b)=>b.ai.overallRisk-a.ai.overallRisk);
+
+  const byCategory = {};
+  projects.forEach(p=>byCategory[p.type]=(byCategory[p.type]||0)+1);
+  const catColors=["#0F6FFF","#178A4C","#C98A00","#D9660B","#7A5AF8","#0EA5A4","#D2291F"];
+
+  return (
+    <div className="p-6 space-y-6 fadein">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="TOTAL PROJECTS" value={projects.length}/>
+        <StatCard label="LOW RISK" value={counts.LOW} accent={RISK_COLORS.LOW}/>
+        <StatCard label="MEDIUM RISK" value={counts.MEDIUM} accent={RISK_COLORS.MEDIUM}/>
+        <StatCard label="HIGH RISK" value={counts.HIGH} accent={RISK_COLORS.HIGH}/>
+        <StatCard label="CRITICAL" value={counts.CRITICAL} accent={RISK_COLORS.CRITICAL}/>
+        <StatCard label="AVG. PROGRESS" value={avgProgress+"%"}/>
+        <StatCard label="DELAYED PROJECTS" value={delayed}/>
+        <StatCard label="TOTAL BUDGET" value={fmtCr(totalBudget)}/>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="card rounded-lg p-5 lg:col-span-1">
+          <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Project Risk Distribution</div>
+          <DonutChart segments={[
+            {label:"Low",value:counts.LOW,color:RISK_COLORS.LOW},
+            {label:"Medium",value:counts.MEDIUM,color:RISK_COLORS.MEDIUM},
+            {label:"High",value:counts.HIGH,color:RISK_COLORS.HIGH},
+            {label:"Critical",value:counts.CRITICAL,color:RISK_COLORS.CRITICAL},
+          ]}/>
+        </div>
+        <div className="card rounded-lg p-5 lg:col-span-2">
+          <div className="text-sm font-semibold mb-1" style={{color:"var(--navy)"}}>Planned vs Actual Progress</div>
+          <div className="text-[11px] text-slate-400 mb-2">By project (sample of 6)</div>
+          <GroupedBars data={projects.slice(0,6).map(p=>({label:p.type.split(" ")[0],planned:p.plannedProgress,actual:p.actualProgress}))}
+            keys={["planned","actual"]} colors={["#B9CBE8","var(--accent)"]} fmt={v=>v+"%"}/>
+          <div className="flex gap-4 text-[11px] text-slate-500 mt-2">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:"#B9CBE8"}}/>Planned</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:"var(--accent)"}}/>Actual</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="card rounded-lg p-5">
+          <div className="text-sm font-semibold mb-1" style={{color:"var(--navy)"}}>Budget vs Expenditure</div>
+          <div className="text-[11px] text-slate-400 mb-2">₹ Crore, sample of 6</div>
+          <GroupedBars data={projects.slice(0,6).map(p=>({label:p.type.split(" ")[0],planned:p.plannedCost,actual:p.currentExpenditure}))}
+            keys={["planned","actual"]} colors={["#B9CBE8","#D9660B"]} fmt={fmtCr}/>
+        </div>
+        <div className="card rounded-lg p-5">
+          <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Projects by Category</div>
+          <DonutChart segments={Object.entries(byCategory).map(([k,v],i)=>({label:k,value:v,color:catColors[i%catColors.length]}))} size={140}/>
+        </div>
+        <div className="card rounded-lg p-5">
+          <div className="text-sm font-semibold mb-1" style={{color:"var(--navy)"}}>Monthly Delay Trend</div>
+          <div className="text-[11px] text-slate-400 mb-2">Average delay, months</div>
+          <Sparkline points={MONTHLY_DELAY_TREND.map(d=>d.avgDelay)} color="var(--r)"/>
+          <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+            {MONTHLY_DELAY_TREND.map(d=><span key={d.m}>{d.m}</span>)}
+          </div>
+        </div>
+      </div>
+
+      <div className="card rounded-lg p-5">
+        <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>High Risk Projects</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] text-slate-500 border-b" style={{borderColor:"var(--border)"}}>
+                <th className="py-2 pr-3">Project Name</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">Location</th>
+                <th className="py-2 pr-3">Planned Cost</th><th className="py-2 pr-3">Progress</th><th className="py-2 pr-3">Delay</th>
+                <th className="py-2 pr-3">Risk Score</th><th className="py-2 pr-3">Risk Level</th><th className="py-2 pr-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {highRisk.map(p=>(
+                <tr key={p.id} className="border-b last:border-0 hover:bg-slate-50" style={{borderColor:"var(--border)"}}>
+                  <td className="py-2.5 pr-3 font-medium">{p.name}</td>
+                  <td className="py-2.5 pr-3 text-slate-500">{p.type}</td>
+                  <td className="py-2.5 pr-3 text-slate-500">{p.location}</td>
+                  <td className="py-2.5 pr-3 font-mono">{fmtCr(p.plannedCost)}</td>
+                  <td className="py-2.5 pr-3">{p.actualProgress}%</td>
+                  <td className="py-2.5 pr-3 text-red-600">{Math.max(0,p.actualDuration-p.plannedDuration)} mo</td>
+                  <td className="py-2.5 pr-3 font-mono font-semibold">{p.ai.overallRisk}%</td>
+                  <td className="py-2.5 pr-3">{RISK_DOT[p.ai.classification]} {p.ai.classification}</td>
+                  <td className="py-2.5 pr-3"><button onClick={()=>goDetails(p.id)} className="text-xs font-semibold" style={{color:"var(--accent)"}}>View →</button></td>
+                </tr>
+              ))}
+              {highRisk.length===0 && <tr><td colSpan="9" className="py-4 text-center text-slate-400 text-sm">No high risk projects currently.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Projects Page ---------------- */
+function ProjectsPage({projects,goDetails}){
+  const [q,setQ]=useState(""); const [type,setType]=useState("All"); const [state,setSt]=useState("All");
+  const [risk,setRisk]=useState("All"); const [status,setStatus]=useState("All");
+  const withRisk = projects.map(p=>({...p, ai: runAIAnalysis(p)}));
+  const types=["All",...new Set(projects.map(p=>p.type))];
+  const states=["All",...new Set(projects.map(p=>p.state))];
+  const statuses=["All",...new Set(projects.map(p=>p.status))];
+
+  const filtered = withRisk.filter(p=>
+    (q===""||p.name.toLowerCase().includes(q.toLowerCase())) &&
+    (type==="All"||p.type===type) && (state==="All"||p.state===state) &&
+    (risk==="All"||p.ai.classification===risk) && (status==="All"||p.status===status)
+  );
+
+  const Select = ({val,set,opts,label}) => (
+    <select value={val} onChange={e=>set(e.target.value)} className="text-xs px-2.5 py-1.5 rounded-md border bg-white" style={{borderColor:"var(--border)"}}>
+      {opts.map(o=><option key={o} value={o}>{label}: {o}</option>)}
+    </select>
+  );
+
+  return (
+    <div className="p-6 space-y-4 fadein">
+      <div className="card rounded-lg p-4 flex flex-wrap gap-2 items-center">
+        <input placeholder="Search projects…" value={q} onChange={e=>setQ(e.target.value)} className="text-sm px-3 py-1.5 rounded-md border flex-1 min-w-[180px]" style={{borderColor:"var(--border)"}}/>
+        <Select val={type} set={setType} opts={types} label="Type"/>
+        <Select val={state} set={setSt} opts={states} label="State"/>
+        <Select val={risk} set={setRisk} opts={["All","LOW","MEDIUM","HIGH","CRITICAL"]} label="Risk"/>
+        <Select val={status} set={setStatus} opts={statuses} label="Status"/>
+      </div>
+      <div className="card rounded-lg p-5">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] text-slate-500 border-b" style={{borderColor:"var(--border)"}}>
+                <th className="py-2 pr-3">Project</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">State</th>
+                <th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Progress</th><th className="py-2 pr-3">Risk</th><th className="py-2 pr-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(p=>(
+                <tr key={p.id} className="border-b last:border-0 hover:bg-slate-50" style={{borderColor:"var(--border)"}}>
+                  <td className="py-2.5 pr-3">
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-[11px] text-slate-400">{p.location}</div>
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-500">{p.type}</td>
+                  <td className="py-2.5 pr-3 text-slate-500">{p.state}</td>
+                  <td className="py-2.5 pr-3">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full" style={{background:"#EEF2F7",color:"var(--navy2)"}}>{p.status}</span>
+                  </td>
+                  <td className="py-2.5 pr-3 w-32">
+                    <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className="h-full rounded-full" style={{width:p.actualProgress+"%",background:"var(--accent)"}}/></div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{p.actualProgress}%</div>
+                  </td>
+                  <td className="py-2.5 pr-3 font-semibold" style={{color:RISK_COLORS[p.ai.classification]}}>{RISK_DOT[p.ai.classification]} {p.ai.classification}</td>
+                  <td className="py-2.5 pr-3"><button onClick={()=>goDetails(p.id)} className="text-xs font-semibold whitespace-nowrap" style={{color:"var(--accent)"}}>View Analysis →</button></td>
+                </tr>
+              ))}
+              {filtered.length===0 && <tr><td colSpan="7" className="py-6 text-center text-slate-400 text-sm">No projects match these filters.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Add Project ---------------- */
+const FIELD_DEFS = [
+  ["name","Project Name","text","New Infrastructure Project"],
+  ["type","Project Type","select",["Highway Construction","Railway Expansion","Water Supply Project","Power Plant","Bridge Construction","Metro Project","Airport Expansion"]],
+  ["state","State / Location","text","Karnataka"],
+  ["plannedCost","Planned Cost (₹ Cr)","number",250],
+  ["currentExpenditure","Current Expenditure (₹ Cr)","number",120],
+  ["plannedDuration","Planned Duration (months)","number",24],
+  ["actualDuration","Actual Duration (months)","number",22],
+  ["plannedProgress","Planned Progress (%)","number",70],
+  ["actualProgress","Actual Progress (%)","number",55],
+  ["totalMilestones","Total Milestones","number",10],
+  ["completedMilestones","Completed Milestones","number",5],
+  ["delayedMilestones","Delayed Milestones","number",2],
+  ["resourcesPlanned","Resources Planned","number",100],
+  ["resourcesUsed","Resources Used","number",82],
+  ["previousDelays","Previous Delays","number",1],
+  ["contractorPerformance","Contractor Performance (0–100)","number",65],
+];
+
+function AddProjectPage({onAnalyze}){
+  const [form,setForm]=useState(()=>{
+    const f={}; FIELD_DEFS.forEach(([k,,t,d])=>f[k]= t==="select"? d[0] : d); return f;
+  });
+  const [analyzing,setAnalyzing]=useState(false);
+  const set=(k,v)=>setForm({...form,[k]:v});
+
+  const submit=()=>{
+    setAnalyzing(true);
+    setTimeout(()=>{
+      const project = {...form, id:"P-"+Math.floor(1000+Math.random()*9000), location: form.state, status:"In Progress",
+        plannedCost:+form.plannedCost, currentExpenditure:+form.currentExpenditure, plannedDuration:+form.plannedDuration,
+        actualDuration:+form.actualDuration, plannedProgress:+form.plannedProgress, actualProgress:+form.actualProgress,
+        totalMilestones:+form.totalMilestones, completedMilestones:+form.completedMilestones, delayedMilestones:+form.delayedMilestones,
+        resourcesPlanned:+form.resourcesPlanned, resourcesUsed:+form.resourcesUsed, previousDelays:+form.previousDelays,
+        contractorPerformance:+form.contractorPerformance};
+      setAnalyzing(false);
+      onAnalyze(project);
+    },1200);
+  };
+
+  return (
+    <div className="p-6 fadein max-w-4xl">
+      <div className="card rounded-lg p-6">
+        <div className="text-sm font-semibold mb-4" style={{color:"var(--navy)"}}>Register New Project</div>
+        <div className="grid md:grid-cols-2 gap-4">
+          {FIELD_DEFS.map(([key,label,type,def])=>(
+            <div key={key}>
+              <label className="text-xs font-medium text-slate-600">{label}</label>
+              {type==="select" ? (
+                <select value={form[key]} onChange={e=>set(key,e.target.value)} className="w-full mt-1 px-3 py-2 text-sm rounded-md border bg-white" style={{borderColor:"var(--border)"}}>
+                  {def.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input type={type} value={form[key]} onChange={e=>set(key,e.target.value)} className="w-full mt-1 px-3 py-2 text-sm rounded-md border" style={{borderColor:"var(--border)"}}/>
+              )}
+            </div>
+          ))}
+        </div>
+        <button disabled={analyzing} onClick={submit} className="mt-6 w-full py-3 rounded-md text-white text-sm font-bold tracking-wide relative overflow-hidden disabled:opacity-80" style={{background:"var(--navy)"}}>
+          {analyzing ? "ANALYZING PROJECT…" : "ANALYZE PROJECT WITH AI"}
+          {analyzing && <span className="absolute left-0 top-0 h-full w-1/4 bg-white/20 scan-anim"/>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- AI Risk Analysis + Explainable AI ---------------- */
+function AIAnalysisPage({projects,selectedId,setSelectedId}){
+  const [running,setRunning]=useState(false);
+  const [result,setResult]=useState(null);
+  const project = projects.find(p=>p.id===selectedId) || projects[0];
+
+  useEffect(()=>{ if(project) setResult(runAIAnalysis(project)); },[selectedId]);
+
+  const run=()=>{
+    setRunning(true); setResult(null);
+    setTimeout(()=>{ setResult(runAIAnalysis(project)); setRunning(false); },1100);
+  };
+
+  if(!project) return <div className="p-6 text-slate-400 text-sm">No projects available.</div>;
+
+  return (
+    <div className="p-6 space-y-5 fadein">
+      <div className="card rounded-lg p-4 flex flex-wrap items-center gap-3">
+        <label className="text-xs font-semibold text-slate-500">PROJECT</label>
+        <select value={project.id} onChange={e=>setSelectedId(e.target.value)} className="text-sm px-3 py-1.5 rounded-md border bg-white flex-1 min-w-[220px]" style={{borderColor:"var(--border)"}}>
+          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <button onClick={run} disabled={running} className="px-4 py-2 rounded-md text-white text-xs font-bold tracking-wide relative overflow-hidden" style={{background:"var(--accent)"}}>
+          {running? "RUNNING AI ANALYSIS…" : "▶ RUN AI ANALYSIS"}
+          {running && <span className="absolute left-0 top-0 h-full w-1/4 bg-white/25 scan-anim"/>}
+        </button>
+      </div>
+
+      {running && (
+        <div className="card rounded-lg p-8 text-center text-sm text-slate-500 font-mono">
+          Project Data → AI Analysis → Delay Prediction → Cost Overrun Prediction → Risk Score → Explanation → Early Warning
+        </div>
+      )}
+
+      {!running && result && (
+        <React.Fragment>
+          <div className="card rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-xs text-slate-400">OVERALL RISK</div>
+                <div className="font-display font-bold text-2xl" style={{color:RISK_COLORS[result.classification]}}>{result.classification} — {result.overallRisk}%</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-slate-400">ESTIMATED DELAY</div>
+                <div className="font-mono font-bold text-lg">{result.estDelayMonths} months</div>
+                <div className="text-xs text-slate-400 mt-1">ESTIMATED COST OVERRUN</div>
+                <div className="font-mono font-bold text-lg">{fmtCr(result.estCostOverrunCr)}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 justify-items-center border-t pt-5" style={{borderColor:"var(--border)"}}>
+              <Gauge value={result.overallRisk} color={RISK_COLORS[result.classification]} label="Overall Risk" size={140}/>
+              <Gauge value={result.delayRisk} color="var(--o)" label="Delay Risk" size={140}/>
+              <Gauge value={result.costRisk} color="var(--r)" label="Cost Overrun Risk" size={140}/>
+            </div>
+          </div>
+
+          <div className="card rounded-lg p-6">
+            <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Why is this project at risk?</div>
+            <ul className="space-y-1.5 mb-5">
+              {result.reasons.map((r,i)=><li key={i} className="text-sm text-slate-600 flex gap-2"><span style={{color:"var(--accent)"}}>—</span>{r}</li>)}
+            </ul>
+            <div className="text-xs font-semibold text-slate-500 mb-2">FEATURE IMPORTANCE (SHAP-style contribution)</div>
+            <HBarChart data={result.factors} colorFn={d=>d.value>60?"var(--r)":d.value>35?"var(--o)":"var(--accent)"}/>
+          </div>
+
+          <div className="card rounded-lg p-6">
+            <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Recommended Actions</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {result.actions.map((a,i)=>(
+                <div key={i} className="text-sm px-3 py-2 rounded-md" style={{background:"#F3F7FF",color:"var(--navy2)"}}>✓ {a}</div>
+              ))}
+            </div>
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Early Warnings ---------------- */
+function EarlyWarningsPage({projects,alerts,setAlerts}){
+  const update = (id,patch)=> setAlerts(alerts.map(a=>a.id===id?{...a,...patch}:a));
+  const [commentDraft,setCommentDraft]=useState({});
+
+  return (
+    <div className="p-6 space-y-4 fadein">
+      {alerts.length===0 && <div className="card rounded-lg p-8 text-center text-slate-400 text-sm">No active early warnings.</div>}
+      {alerts.map(a=>{
+        const p = projects.find(pr=>pr.id===a.projectId);
+        if(!p) return null;
+        const ai = runAIAnalysis(p);
+        return (
+          <div key={a.id} className="card rounded-lg overflow-hidden">
+            <div className="risk-strip h-1 w-full" style={{background:RISK_COLORS[ai.classification]}}/>
+            <div className="p-5">
+              <div className="flex items-start justify-between flex-wrap gap-2">
+                <div>
+                  <div className="text-xs font-bold tracking-wide" style={{color:RISK_COLORS[ai.classification]}}>
+                    🚨 {ai.classification} WARNING
+                  </div>
+                  <div className="font-display font-semibold text-base mt-1">{p.name}</div>
+                  <div className="text-xs text-slate-400">{p.location} · Risk Score {ai.overallRisk}%</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select value={a.priority} onChange={e=>update(a.id,{priority:e.target.value})} className="text-xs px-2 py-1 rounded-md border bg-white" style={{borderColor:"var(--border)"}}>
+                    <option>Low</option><option>Medium</option><option>High</option><option>Urgent</option>
+                  </select>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <input type="checkbox" checked={a.reviewed} onChange={e=>update(a.id,{reviewed:e.target.checked})}/> Reviewed
+                  </label>
+                </div>
+              </div>
+              <div className="text-sm text-slate-600 mt-3">{ai.reasons[0]}</div>
+              <div className="text-xs font-semibold text-slate-500 mt-3 mb-1">RECOMMENDED ACTIONS</div>
+              <ul className="text-sm text-slate-600 space-y-1">
+                {ai.actions.map((r,i)=><li key={i}>• {r}</li>)}
+              </ul>
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t" style={{borderColor:"var(--border)"}}>
+                <input placeholder="Assign to officer…" value={a.assignee} onChange={e=>update(a.id,{assignee:e.target.value})}
+                  className="text-xs px-2.5 py-1.5 rounded-md border" style={{borderColor:"var(--border)"}}/>
+                <input placeholder="Add a comment…" value={commentDraft[a.id]||""} onChange={e=>setCommentDraft({...commentDraft,[a.id]:e.target.value})}
+                  className="text-xs px-2.5 py-1.5 rounded-md border flex-1 min-w-[160px]" style={{borderColor:"var(--border)"}}/>
+                <button onClick={()=>{ if((commentDraft[a.id]||"").trim()){ update(a.id,{comments:[...a.comments,commentDraft[a.id]]}); setCommentDraft({...commentDraft,[a.id]:""}); } }}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md text-white" style={{background:"var(--navy)"}}>Add</button>
+              </div>
+              {a.comments.length>0 && (
+                <div className="mt-2 space-y-1">
+                  {a.comments.map((c,i)=><div key={i} className="text-xs text-slate-500 bg-slate-50 rounded-md px-2.5 py-1.5">💬 {c}</div>)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------------- Project Details ---------------- */
+function ProjectDetailsPage({project,alerts}){
+  if(!project) return <div className="p-6 text-slate-400 text-sm">Project not found.</div>;
+  const ai = runAIAnalysis(project);
+  const relatedAlert = alerts.find(a=>a.projectId===project.id);
+  const milestoneArr = Array.from({length:project.totalMilestones},(_,i)=>i<project.completedMilestones?"done":(i<project.completedMilestones+project.delayedMilestones?"delayed":"pending"));
+
+  return (
+    <div className="p-6 space-y-5 fadein">
+      <div className="card rounded-lg p-6">
+        <div className="flex justify-between items-start flex-wrap gap-2">
+          <div>
+            <div className="font-display font-bold text-xl" style={{color:"var(--navy)"}}>{project.name}</div>
+            <div className="text-sm text-slate-500">{project.location} · {project.type} · {project.state}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-slate-400">RISK SCORE</div>
+            <div className="font-display font-bold text-2xl" style={{color:RISK_COLORS[ai.classification]}}>{ai.overallRisk}% · {ai.classification}</div>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-4 gap-4 mt-5 pt-5 border-t" style={{borderColor:"var(--border)"}}>
+          <div><div className="text-xs text-slate-400">Planned Cost</div><div className="font-mono font-semibold">{fmtCr(project.plannedCost)}</div></div>
+          <div><div className="text-xs text-slate-400">Expenditure</div><div className="font-mono font-semibold">{fmtCr(project.currentExpenditure)}</div></div>
+          <div><div className="text-xs text-slate-400">Timeline</div><div className="font-mono font-semibold">{project.plannedDuration}mo → {project.actualDuration}mo</div></div>
+          <div><div className="text-xs text-slate-400">Progress</div><div className="font-mono font-semibold">{project.actualProgress}% / {project.plannedProgress}%</div></div>
+        </div>
+      </div>
+
+      <div className="card rounded-lg p-6">
+        <div className="text-sm font-semibold mb-4" style={{color:"var(--navy)"}}>Milestone Timeline — Planned vs Actual</div>
+        <div className="text-[11px] text-slate-400 mb-1.5">Planned</div>
+        <div className="flex gap-1.5 mb-3">{Array.from({length:project.totalMilestones}).map((_,i)=><div key={i} className="h-2.5 flex-1 rounded-sm" style={{background:"#B9CBE8"}}/>)}</div>
+        <div className="text-[11px] text-slate-400 mb-1.5">Actual</div>
+        <div className="flex gap-1.5">
+          {milestoneArr.map((s,i)=>(
+            <div key={i} className="h-2.5 flex-1 rounded-sm" style={{background: s==="done"?RISK_COLORS.LOW : s==="delayed"?RISK_COLORS.CRITICAL : "#E7ECF3"}}/>
+          ))}
+        </div>
+        <div className="flex gap-4 text-[11px] text-slate-500 mt-2">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:RISK_COLORS.LOW}}/>Completed</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:RISK_COLORS.CRITICAL}}/>Delayed</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{background:"#E7ECF3"}}/>Pending</span>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="card rounded-lg p-6">
+          <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>AI Prediction</div>
+          <div className="grid grid-cols-3 gap-2 justify-items-center">
+            <Gauge value={ai.overallRisk} color={RISK_COLORS[ai.classification]} label="Overall" size={100}/>
+            <Gauge value={ai.delayRisk} color="var(--o)" label="Delay" size={100}/>
+            <Gauge value={ai.costRisk} color="var(--r)" label="Cost" size={100}/>
+          </div>
+        </div>
+        <div className="card rounded-lg p-6">
+          <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Risk Factors</div>
+          <HBarChart data={ai.factors.slice(0,4)} colorFn={d=>d.value>60?"var(--r)":d.value>35?"var(--o)":"var(--accent)"}/>
+        </div>
+      </div>
+
+      <div className="card rounded-lg p-6">
+        <div className="text-sm font-semibold mb-2" style={{color:"var(--navy)"}}>Alerts</div>
+        {relatedAlert ? (
+          <div className="text-sm text-slate-600">🚨 {ai.classification} warning active · Priority: {relatedAlert.priority} · {relatedAlert.reviewed?"Reviewed":"Pending review"}</div>
+        ) : <div className="text-sm text-slate-400">No active alerts for this project.</div>}
+        <div className="text-xs font-semibold text-slate-500 mt-4 mb-1">RECOMMENDED ACTIONS</div>
+        <ul className="text-sm text-slate-600 space-y-1">{ai.actions.map((a,i)=><li key={i}>• {a}</li>)}</ul>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Reports ---------------- */
+function ReportsPage({projects}){
+  const [selected,setSelected]=useState(projects[0]?.id);
+  const project = projects.find(p=>p.id===selected);
+  const ai = project && runAIAnalysis(project);
+
+  const download=()=>{
+    if(!project) return;
+    const lines = [
+      `INFRASHIELD AI — PROJECT REPORT`,
+      `Generated: ${new Date().toLocaleString()}`,
+      ``,
+      `Project: ${project.name}`,
+      `Type: ${project.type} | Location: ${project.location}, ${project.state}`,
+      ``,
+      `PROGRESS ANALYSIS`,
+      `Planned Progress: ${project.plannedProgress}% | Actual Progress: ${project.actualProgress}%`,
+      ``,
+      `COST ANALYSIS`,
+      `Planned Cost: ₹${project.plannedCost} Cr | Expenditure: ₹${project.currentExpenditure} Cr`,
+      ``,
+      `DELAY ANALYSIS`,
+      `Planned Duration: ${project.plannedDuration} months | Actual: ${project.actualDuration} months`,
+      ``,
+      `RISK PREDICTION`,
+      `Overall Risk: ${ai.classification} (${ai.overallRisk}%) | Delay Risk: ${ai.delayRisk}% | Cost Overrun Risk: ${ai.costRisk}%`,
+      `Estimated Delay: ${ai.estDelayMonths} months | Estimated Cost Overrun: ₹${ai.estCostOverrunCr} Cr`,
+      ``,
+      `AI EXPLANATION`,
+      ...ai.reasons.map(r=>"- "+r),
+      ``,
+      `RECOMMENDATIONS`,
+      ...ai.actions.map(r=>"- "+r),
+    ];
+    const blob = new Blob([lines.join("\n")],{type:"text/plain"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download=`${project.id}_Report.txt`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="p-6 fadein max-w-3xl">
+      <div className="card rounded-lg p-6">
+        <div className="text-sm font-semibold mb-3" style={{color:"var(--navy)"}}>Generate Project Report</div>
+        <select value={selected} onChange={e=>setSelected(e.target.value)} className="w-full text-sm px-3 py-2 rounded-md border bg-white mb-4" style={{borderColor:"var(--border)"}}>
+          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {project && ai && (
+          <div className="text-sm text-slate-600 space-y-2 border-t pt-4" style={{borderColor:"var(--border)"}}>
+            <div><b>Summary:</b> {project.name} is {ai.overallRisk}% risk ({ai.classification}), currently {project.actualProgress}% complete against a planned {project.plannedProgress}%.</div>
+            <div><b>Cost:</b> ₹{project.currentExpenditure} Cr spent of ₹{project.plannedCost} Cr planned. Projected overrun: {fmtCr(ai.estCostOverrunCr)}.</div>
+            <div><b>Delay:</b> Estimated additional delay of {ai.estDelayMonths} months.</div>
+          </div>
+        )}
+        <button onClick={download} className="mt-5 w-full py-2.5 rounded-md text-white text-sm font-semibold" style={{background:"var(--navy)"}}>⬇ Download Report</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Settings ---------------- */
+function SettingsPage(){
+  return (
+    <div className="p-6 fadein max-w-2xl">
+      <div className="card rounded-lg p-6 space-y-4">
+        <div className="text-sm font-semibold" style={{color:"var(--navy)"}}>Prediction Engine</div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">Model backend</span>
+          <span className="font-mono text-xs px-2 py-1 rounded-md" style={{background:"#F3F7FF",color:"var(--navy2)"}}>demo-engine v1 (rule-based)</span>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">Ready for XGBoost / Scikit-learn model</span>
+          <span className="text-xs font-semibold" style={{color:"var(--g)"}}>✓ Architecture ready</span>
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-600">Explainability</span>
+          <span className="font-mono text-xs px-2 py-1 rounded-md" style={{background:"#F3F7FF",color:"var(--navy2)"}}>SHAP-compatible output</span>
+        </div>
+        <div className="text-sm font-semibold pt-3 border-t" style={{color:"var(--navy)",borderColor:"var(--border)"}}>Notification Thresholds</div>
+        <label className="flex items-center justify-between text-sm text-slate-600">Alert on HIGH risk <input type="checkbox" defaultChecked/></label>
+        <label className="flex items-center justify-between text-sm text-slate-600">Alert on CRITICAL risk <input type="checkbox" defaultChecked/></label>
+        <label className="flex items-center justify-between text-sm text-slate-600">Weekly summary email <input type="checkbox"/></label>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- App ---------------- */
+function App(){
+  const [loggedIn,setLoggedIn]=useState(false);
+  const [page,setPage]=useState("dashboard");
+  const [collapsed,setCollapsed]=useState(false);
+  const [projects,setProjects]=useState(SAMPLE_PROJECTS);
+  const [selectedProjectId,setSelectedProjectId]=useState(SAMPLE_PROJECTS[0].id);
+  const [detailsId,setDetailsId]=useState(null);
+  const [alerts,setAlerts]=useState(()=>
+    SAMPLE_PROJECTS.filter(p=>runAIAnalysis(p).classification==="HIGH"||runAIAnalysis(p).classification==="CRITICAL")
+      .map(p=>({id:"A-"+p.id,projectId:p.id,reviewed:false,assignee:"",priority: runAIAnalysis(p).classification==="CRITICAL"?"Urgent":"High",comments:[]}))
+  );
+
+  if(!loggedIn) return <LoginPage onLogin={()=>setLoggedIn(true)}/>;
+
+  const goDetails = id => { setDetailsId(id); setPage("details"); };
+  const onAnalyze = project => {
+    setProjects([project,...projects]);
+    setAlerts(prev=>{
+      const ai = runAIAnalysis(project);
+      if(ai.classification==="HIGH"||ai.classification==="CRITICAL"){
+        return [{id:"A-"+project.id,projectId:project.id,reviewed:false,assignee:"",priority:ai.classification==="CRITICAL"?"Urgent":"High",comments:[]},...prev];
+      }
+      return prev;
+    });
+    setSelectedProjectId(project.id);
+    setPage("ai");
+  };
+
+  const titles = {dashboard:"Dashboard",projects:"Projects",add:"Add Project",ai:"AI Risk Analysis",warnings:"Early Warning System",reports:"Reports",settings:"Settings",details:"Project Details"};
+
+  return (
+    <div className="flex" style={{background:"var(--bg)"}}>
+      <Sidebar page={page} setPage={setPage} collapsed={collapsed} setCollapsed={setCollapsed}/>
+      <div className="flex-1 min-w-0">
+        <TopBar title={titles[page]} onLogout={()=>setLoggedIn(false)}/>
+        {page==="dashboard" && <DashboardPage projects={projects} goDetails={goDetails}/>}
+        {page==="projects" && <ProjectsPage projects={projects} goDetails={goDetails}/>}
+        {page==="add" && <AddProjectPage onAnalyze={onAnalyze}/>}
+        {page==="ai" && <AIAnalysisPage projects={projects} selectedId={selectedProjectId} setSelectedId={setSelectedProjectId}/>}
+        {page==="warnings" && <EarlyWarningsPage projects={projects} alerts={alerts} setAlerts={setAlerts}/>}
+        {page==="reports" && <ReportsPage projects={projects}/>}
+        {page==="settings" && <SettingsPage/>}
+        {page==="details" && <ProjectDetailsPage project={projects.find(p=>p.id===detailsId)} alerts={alerts}/>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
