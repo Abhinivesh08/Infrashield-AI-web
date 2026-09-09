@@ -17,7 +17,7 @@ A single-file, front-end-only React prototype (`InfraShield_AI.html`) — no bac
 | e | Benchmarking & Comparative Analytics Module | ✅ Implemented | Benchmarking page — sector averages, project-vs-sector percentile |
 | f | Cost Escalation Driver Analysis Module | ✅ Implemented | Driver Analysis page — portfolio-wide and per-sector driver ranking |
 | g | AI-powered Monitoring Dashboard | ✅ Implemented | Dashboard page |
-| h | LLM-enabled Project Intelligence Assistant | ⚠️ Prototype | Assistant page — rule-based NLU over the same dataset, **not** a live LLM call (see below) |
+| h | LLM-enabled Project Intelligence Assistant | ✅ Prototype | Assistant page — rule-based NLU over the same dataset, **not** a live LLM call (see below) |
 | i | Documentation and deployment framework | ✅ This file | Scope, architecture, and deployment notes |
 
 ## Honest scope note
