@@ -48,4 +48,4 @@ No build step is required.
 
 ## Login
 
-The login screen is a UI demo only (no real authentication, no backend). Use "Continue with Demo Login" to enter the app.
+The login screen is a UI demo only (no real authentication backend). Use "Continue with Demo Login" to enter the app.
