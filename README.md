@@ -4,7 +4,7 @@ An AI-powered predictive risk dashboard for infrastructure projects, built for t
 
 ## What this is
 
-A single-file, front-end-only React prototype (`InfraShield_AI.html`) — no backend, no build step. Open it directly in a browser. All data is in-memory sample data; nothing is persisted or sent anywhere.
+A single-file, front-end-only React prototype (`InfraShield_AI.html`) — backend, no build step. Open it directly in a browser. All data is in-memory sample data; nothing is persisted or sent anywhere.
 
 ## Outcome coverage (vs. the SIH26103 brief)
 
